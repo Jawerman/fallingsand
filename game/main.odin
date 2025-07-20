@@ -2,14 +2,26 @@ package game
 
 import "core:log"
 import "core:math"
+import "core:math/rand"
+
 import sdl "vendor:sdl3"
 
 WIDTH :: 800
 HEIGHT :: 600
-SAND_SPAWN_RATIO :: 0.005
+SPAWN_RATIO :: 0.05
 SAND_BRUSH_SIZE :: 15
 
+SPEED :: 3
+
 SIM_SIZE :: WIDTH * HEIGHT
+
+SAND_COLORS: []u32 = {0xf2cc0dff, 0xf5d63dff, 0xf9e586ff, 0xfaeb9eff, 0xfcf5cfff}
+WATER_COLOR: u32 = 0x0000ffff
+SOLID_COLOR: u32 = 0x3f3f3fff
+NONE_COLOR: u32 = 0x000000ff
+
+MATERIALS: []MaterialType = {MaterialType.SOLID, MaterialType.SAND, MaterialType.LIQUID}
+current_material_index := 0
 
 main :: proc() {
 	context.logger = log.create_console_logger()
@@ -39,7 +51,7 @@ main :: proc() {
 
 	clear_cellular_board(board)
 
-	dt: f64 = 1000.0 / 60
+	dt: f64 = 1000.0 / (60 * SPEED)
 	accumulator := 0.0
 	lastTime := sdl.GetPerformanceCounter()
 	freq: f64 = (f64)(sdl.GetPerformanceFrequency())
@@ -61,28 +73,47 @@ main :: proc() {
 			case .KEY_DOWN:
 				if ev.key.scancode == .ESCAPE do break main_loop
 				if ev.key.scancode == .DELETE do clear_cellular_board(board)
+				if ev.key.scancode == .S do current_material_index = (current_material_index + 1) % len(MATERIALS)
 			}
 		}
 		// update game state
 		mx, my: f32 = ---, ---
 		buttons := sdl.GetMouseState(&mx, &my)
 
-		if ((buttons & sdl.BUTTON_LMASK) == sdl.MouseButtonFlags{.LEFT}) {
-			window_size_x: i32 = ---
-			window_size_y: i32 = ---
+		right_mouse_down := (buttons & sdl.BUTTON_RMASK) == sdl.MouseButtonFlags{.RIGHT}
+		left_mouse_down := (buttons & sdl.BUTTON_LMASK) == sdl.MouseButtonFlags{.LEFT}
 
-			sdl.GetWindowSizeInPixels(window, &window_size_x, &window_size_y)
+		// checks
+		window_size_x: i32 = ---
+		window_size_y: i32 = ---
 
-			mx = mx / (f32)(window_size_x) * (f32)(WIDTH)
-			my = my / (f32)(window_size_y) * (f32)(HEIGHT)
+		sdl.GetWindowSizeInPixels(window, &window_size_x, &window_size_y)
 
-			x := (int)(math.floor(mx))
-			y := (int)(math.floor(my))
-			particle := Particle {
-				material_type = MaterialType.SAND,
+		mx = mx / (f32)(window_size_x) * (f32)(WIDTH)
+		my = my / (f32)(window_size_y) * (f32)(HEIGHT)
+
+		x := (int)(math.floor(mx))
+		y := (int)(math.floor(my))
+
+		if left_mouse_down {
+			current_material := MATERIALS[current_material_index]
+			ratio: f32 = SPAWN_RATIO
+			if (current_material == MaterialType.SOLID) {
+				ratio = 1.0
 			}
-			brush_paint(board, x, y)
+			brush_paint_particle(board, x, y, generate_particle(current_material), ratio)
 		}
+
+		if right_mouse_down {
+			brush_paint_particle(
+				board,
+				x,
+				y,
+				Particle{material_type = MaterialType.NONE, color = NONE_COLOR},
+				1.0,
+			)
+		}
+
 
 		for accumulator >= dt {
 			simulate_step(board)

@@ -10,12 +10,33 @@ import sdl "vendor:sdl3"
 
 MaterialType :: enum {
 	NONE,
+	SOLID,
+	LIQUID,
 	SAND,
 }
 
 Particle :: struct {
 	material_type: MaterialType,
+	color:         u32,
 }
+
+generate_particle :: proc(particle_type: MaterialType) -> Particle {
+	color: u32 = ---
+
+	switch particle_type {
+	case MaterialType.SAND:
+		color = rand.choice(SAND_COLORS)
+	case MaterialType.LIQUID:
+		color = WATER_COLOR
+	case MaterialType.SOLID:
+		color = SOLID_COLOR
+	case MaterialType.NONE:
+		color = NONE_COLOR
+	}
+
+	return Particle{material_type = particle_type, color = color}
+}
+
 
 get_particle_index :: proc(x, y: int) -> int {
 	return (y * WIDTH) + x
@@ -28,22 +49,15 @@ get_particle_coords :: proc(index: int) -> (x: int, y: int) {
 	return
 }
 
-brush_paint :: proc(board: []Particle, x, y: int) {
+brush_paint_particle :: proc(board: []Particle, x, y: int, particle: Particle, ratio: f32) {
 	for i in 0 ..< SAND_BRUSH_SIZE {
 		for j in 0 ..< SAND_BRUSH_SIZE {
 			new_particle_y := y - (SAND_BRUSH_SIZE / 2) + i
 			new_particle_x := x - (SAND_BRUSH_SIZE / 2) + j
-
-			if is_out_of_bounds(new_particle_x, new_particle_y) ||
-			   rand.float32() > SAND_SPAWN_RATIO {
+			if is_out_of_bounds(new_particle_x, new_particle_y) || rand.float32() > ratio {
 				continue
 			}
-			set_cellular_board_particle(
-				board,
-				Particle{material_type = MaterialType.SAND},
-				new_particle_x,
-				new_particle_y,
-			)
+			set_cellular_board_particle(board, particle, new_particle_x, new_particle_y)
 		}
 	}
 
@@ -65,38 +79,54 @@ set_cellular_board_particle :: proc(board: []Particle, particle: Particle, x, y:
 update_texture :: proc(pixels: []u32, board: []Particle) {
 	for i in 0 ..< len(board) {
 		color: u32 = ---
-		switch board[i].material_type {
-
-		case MaterialType.SAND:
-			color = 0xffffffff
-		case MaterialType.NONE:
-			color = 0x000000ff
-		}
-		pixels[i] = color
+		pixels[i] = board[i].color
 	}
 }
 
 simulate_step :: proc(board: []Particle) {
+	for i := HEIGHT - 1; i >= 0; i -= 1 {
+		simulate_row(board, i, i % 2 == 0)
+	}
+}
 
-	for i := len(board) - 1; i >= 0; i -= 1 {
-		switch board[i].material_type {
-
-		case MaterialType.SAND:
-			simulate_sand_step(board, i)
-		case MaterialType.NONE:
-
+simulate_row :: proc(board: []Particle, y: int, backwards: bool) {
+	if backwards {
+		for i := WIDTH - 1; i >= 0; i -= 1 {
+			simulate_particle(board, i, y)
+		}
+	} else {
+		for i := 0; i < WIDTH; i += 1 {
+			simulate_particle(board, i, y)
 		}
 	}
 }
 
+simulate_particle :: proc(board: []Particle, x, y: int) -> bool {
+	index := get_particle_index(x, y)
+	particle := board[index]
 
-simulate_sand_step :: proc(board: []Particle, index: int) {
+	switch particle.material_type {
+
+	case MaterialType.SAND:
+		return simulate_sand_step(board, index)
+	case MaterialType.LIQUID:
+		return simulate_liquid_step(board, index)
+	case MaterialType.NONE:
+		return false
+	case MaterialType.SOLID:
+		return false
+	}
+	return false
+}
+
+
+simulate_sand_step :: proc(board: []Particle, index: int) -> bool {
 	x, y := get_particle_coords(index)
 	destination_y := y + 1
 
 	if is_position_free(board, x, destination_y) {
 		move_particle(board, x, y, x, destination_y)
-		return
+		return true
 	}
 
 	check_order := []int{-1, 1}
@@ -108,10 +138,45 @@ simulate_sand_step :: proc(board: []Particle, index: int) {
 		destination_x := x + order
 		if is_position_free(board, destination_x, destination_y) {
 			move_particle(board, x, y, destination_x, destination_y)
-			break
+			return true
+		}
+	}
+	return false
+}
+
+simulate_liquid_step :: proc(board: []Particle, index: int) -> bool {
+	x, y := get_particle_coords(index)
+
+
+	destination_y := y + 1
+
+	if is_position_free(board, x, destination_y) {
+		move_particle(board, x, y, x, destination_y)
+		return true
+	}
+
+	check_order := []int{-1, 1}
+	if (rand.float32() > 0.5) {
+		check_order = []int{1, -1}
+	}
+
+	for order in check_order {
+		destination_x := x + order
+		if is_position_free(board, destination_x, destination_y) {
+			move_particle(board, x, y, destination_x, destination_y)
+			return true
 		}
 	}
 
+	for order in check_order {
+		destination_y := y
+		destination_x := x + order
+		if is_position_free(board, destination_x, destination_y) {
+			move_particle(board, x, y, destination_x, destination_y)
+			return true
+		}
+	}
+	return false
 }
 
 is_position_free :: proc(board: []Particle, x, y: int) -> bool {
