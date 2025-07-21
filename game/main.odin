@@ -56,8 +56,11 @@ main :: proc() {
 	lastTime := sdl.GetPerformanceCounter()
 	freq: f64 = (f64)(sdl.GetPerformanceFrequency())
 
+	start_line: [2]int = {-1, -1}
 
 	main_loop: for {
+		// clear_texture(pixels)
+
 		now := sdl.GetPerformanceCounter()
 		frameTime := (f64)(now - lastTime) / freq * 1000.0
 		lastTime = now
@@ -95,6 +98,20 @@ main :: proc() {
 		x := (int)(math.floor(mx))
 		y := (int)(math.floor(my))
 
+		// if start_line.x < 0 && left_mouse_down {
+		// 	start_line.x = x
+		// 	start_line.y = y
+		// }
+		//
+		// if start_line.x >= 0 && left_mouse_down {
+		// 	raster_line(pixels, rand.choice(SAND_COLORS), start_line.x, start_line.y, x, y)
+		// }
+		//
+		// if !left_mouse_down {
+		// 	start_line.x = -1
+		// 	start_line.y = -1
+		// }
+
 		if left_mouse_down {
 			current_material := MATERIALS[current_material_index]
 			ratio: f32 = SPAWN_RATIO
@@ -113,7 +130,6 @@ main :: proc() {
 				1.0,
 			)
 		}
-
 
 		for accumulator >= dt {
 			simulate_step(board)
